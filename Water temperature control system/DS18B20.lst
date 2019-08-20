@@ -1,0 +1,224 @@
+C51 COMPILER V9.50a   DS18B20                                                              12/11/2018 21:57:52 PAGE 1   
+
+
+C51 COMPILER V9.50a, COMPILATION OF MODULE DS18B20
+OBJECT MODULE PLACED IN DS18B20.obj
+COMPILER INVOKED BY: D:\c51\C51\BIN\C51.EXE scr\DS18B20.c BROWSE DEBUG OBJECTEXTEND PRINT(.\DS18B20.lst) TABS(2) OBJECT(
+                    -DS18B20.obj)
+
+line level    source
+
+   1          /*
+   2          **********************************************************************
+   3          *                         头文件包含
+   4          **********************************************************************
+   5          */
+   6          #include "DS18B20.h"
+   7          
+   8          
+   9          /*
+  10          **********************************************************************
+  11          *                         本地全局变量
+  12          **********************************************************************
+  13          */
+  14          sbit gIO = P3^7;            // DS18B20的单总线IO接在P3.7上
+  15          
+  16          /*
+  17          **********************************************************************
+  18          *                         内部函数原型声明
+  19          **********************************************************************
+  20          */
+  21          static void delay5ms(void);
+  22          static void delay15us(void);
+  23          static void delay45us(void);
+  24          static void delay70us(void);
+  25          static void delay750us(void);
+  26          static void delay1ms(void);
+  27          static void delay750ms(void);
+  28          static void delay500ms(void);
+  29          static void delay200ms(void);
+  30          static u8 Ds18b20Init(void);
+  31          static void Ds18b20WriteByte(u8 dat);
+  32          
+  33          
+  34          
+  35          
+  36          /************ 以下为低层时序函数 ************************************/ 
+  37          
+  38          /*********************************************************************
+  39          * 函 数 名       : Ds18b20Init
+  40          * 函数功能     : 按照DS18B20底层时序要求进行传感器初始化
+  41          * 参数列表       : 无
+  42          * 函数输出       : 若初始化成功则返回0，否则返回1
+  43          *********************************************************************/
+  44          static u8 Ds18b20Init(void)
+  45          {
+  46   1        u8 i = 0;
+  47   1      
+  48   1        gIO = 0;      // 时序要求将总线拉低480us~960us
+  49   1        delay750us();   // 实际延时750us，符合480-960之间的条件
+  50   1        gIO = 1;      // 然后拉高总线，如果DS18B20做出反应会将在15us~60us后总线被拉低
+  51   1      
+  52   1        i = 0;
+  53   1        while (gIO)     // 等待DS18B20拉低总线
+  54   1        {
+C51 COMPILER V9.50a   DS18B20                                                              12/11/2018 21:57:52 PAGE 2   
+
+  55   2          i++;
+  56   2          if(i>5)     // 等待 15*5=75us，如果还没拉低则可以认为初始化失败了
+  57   2          {
+  58   3            return 1; // 初始化失败
+  59   3          }
+  60   2          delay15us();  // 隔15us查看一下是否收到DS18B20的回应
+  61   2        }
+  62   1        return 0;     //初始化成功
+  63   1      }
+  64          
+  65          
+  66          /*********************************************************************
+  67          * 函 数 名       : Ds18b20WriteByte
+  68          * 函数功能     : 按照DS18B20底层时序要求向DS18B20写入1字节数据
+  69          * 参数列表       : dat - 待写入的1字节数据
+  70          * 函数输出       : 无
+  71          *********************************************************************/
+  72          static void Ds18b20WriteByte(u8 dat)
+  73          {
+  74   1        u16 i = 0, j = 0;
+  75   1      
+  76   1        for (j=0; j<8; j++)
+  77   1        {
+  78   2          gIO = 0;            // 每写入一位数据之前先把总线拉低1us
+  79   2          i++;
+  80   2          gIO = dat & 0x01;     // 然后写入一个数据，从最低位开始
+  81   2          delay70us();      // 时序要求最少60us
+  82   2          gIO = 1;        // 然后释放总线，至少1us给总线恢复时间才能接着写入第二个数值
+  83   2          dat >>= 1;
+  84   2        }
+  85   1      }
+  86          
+  87          
+  88          /*********************************************************************
+  89          * 函 数 名       : Ds18b20ReadByte
+  90          * 函数功能     : 按照DS18B20底层时序要求从DS18B20中读取1字节数据
+  91          * 参数列表       : 无
+  92          * 函数输出       : 返回读取到的1字节数据
+  93          *********************************************************************/
+  94          u8 Ds18b20ReadByte(void)
+  95          {
+  96   1        u8 byte = 0, bi = 0;
+  97   1        u16 i = 0, j = 0;
+  98   1          
+  99   1        for (j=8; j>0; j--)
+ 100   1        {
+ 101   2          gIO = 0;    // 先将总线拉低1us
+ 102   2          i++;
+ 103   2          gIO = 1;    // 然后释放总线
+ 104   2          i++;
+ 105   2          i++;      // 延时6us等待数据稳定
+ 106   2          bi = gIO;   // 读取数据，从最低位开始读取
+ 107   2          /*将byte左移一位，然后与上右移7位后的bi，注意移动之后移掉那位补0。*/
+ 108   2          byte = (byte >> 1) | (bi << 7); 
+ 109   2          //byte |= (bi << (8-j));
+ 110   2          delay45us();
+ 111   2        }       
+ 112   1        return byte;
+ 113   1      }
+ 114          
+ 115          
+ 116          /*************** 高层时序 *************************************/
+C51 COMPILER V9.50a   DS18B20                                                              12/11/2018 21:57:52 PAGE 3   
+
+ 117          
+ 118          void Ds18b20TempConvertCmd(void)
+ 119          {
+ 120   1        Ds18b20Init();
+ 121   1        delay1ms();
+ 122   1        Ds18b20WriteByte(0xcc);   // 跳过ROM操作命令     
+ 123   1        Ds18b20WriteByte(0x44);     // 温度转换命令
+ 124   1        delay200ms();       // 等待转换成功
+ 125   1      }
+ 126          
+ 127          void Ds18b20TempReadCmd(void)
+ 128          { 
+ 129   1        Ds18b20Init();
+ 130   1        delay1ms();
+ 131   1        Ds18b20WriteByte(0xcc);   // 跳过ROM操作命令
+ 132   1        Ds18b20WriteByte(0xbe);   // 发送读取温度命令
+ 133   1      }
+ 134          
+ 135          
+ 136          
+ 137          /*************** 注意下面的延时函数都是12M晶振模式下的 ******************/
+ 138          static void delay15us(void)   //误差 0us
+ 139          {
+ 140   1          unsigned char a;
+ 141   1          for(a=6;a>0;a--);
+ 142   1      }
+ 143          
+ 144          static void delay45us(void)   //误差 0us
+ 145          {
+ 146   1          unsigned char a;
+ 147   1          for(a=21;a>0;a--);
+ 148   1      }
+ 149          
+ 150          static void delay70us(void)   //误差 0us
+ 151          {
+ 152   1          unsigned char a,b;
+ 153   1          for(b=1;b>0;b--)
+ 154   1              for(a=32;a>0;a--);
+ 155   1      }
+ 156          
+ 157          
+ 158          static void delay750us(void)   //误差 0us
+ 159          {
+ 160   1          unsigned char a,b;
+ 161   1          for(b=83;b>0;b--)
+ 162   1              for(a=3;a>0;a--);
+ 163   1      }
+ 164          
+ 165          static void delay1ms(void)   //误差 0us
+ 166          {
+ 167   1          unsigned char a,b,c;
+ 168   1          for(c=1;c>0;c--)
+ 169   1              for(b=142;b>0;b--)
+ 170   1                  for(a=2;a>0;a--);
+ 171   1      }
+ 172          
+ 173          static void delay750ms(void)   //误差 0us
+ 174          {
+ 175   1          unsigned char a,b,c;
+ 176   1          for(c=167;c>0;c--)
+ 177   1              for(b=136;b>0;b--)
+ 178   1                  for(a=15;a>0;a--);
+C51 COMPILER V9.50a   DS18B20                                                              12/11/2018 21:57:52 PAGE 4   
+
+ 179   1      }
+ 180          static void delay500ms(void)   //误差 0us
+ 181          {
+ 182   1          unsigned char a,b,c;
+ 183   1          for(c=23;c>0;c--)
+ 184   1              for(b=152;b>0;b--)
+ 185   1                  for(a=70;a>0;a--);
+ 186   1      }
+ 187          static void delay200ms(void)   //误差 0us
+ 188          {
+ 189   1          unsigned char a,b,c;
+ 190   1          for(c=4;c>0;c--)
+ 191   1              for(b=116;b>0;b--)
+ 192   1                  for(a=214;a>0;a--);
+ 193   1          _nop_();  //if Keil,require use intrins.h
+ 194   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    302    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----      12
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

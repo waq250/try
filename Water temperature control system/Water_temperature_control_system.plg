@@ -1,0 +1,47 @@
+<html>
+<body>
+<pre>
+<h1>礦ision Build Log</h1>
+<h2>Project:</h2>
+C:\Users\Administrator\Desktop\水温20181128蓝牙\水温2.1(温度采集预处理）\Water temperature control system\Water_temperature_control_system.uvproj
+Project File Date:  11/28/2018
+
+<h2>Output:</h2>
+Build target 'Target 1'
+compiling main.c...
+linking...
+*** WARNING L16: UNCALLED SEGMENT, IGNORED FOR OVERLAY PROCESS
+    SEGMENT: ?PR?DELAY750MS?DS18B20
+*** WARNING L16: UNCALLED SEGMENT, IGNORED FOR OVERLAY PROCESS
+    SEGMENT: ?PR?DELAY500MS?DS18B20
+Program Size: data=105.0 xdata=0 code=2710
+creating hex file from "Water_temperature_control_system"...
+"Water_temperature_control_system" - 0 Error(s), 2 Warning(s).
+Build target 'Target 1'
+compiling main.c...
+linking...
+*** WARNING L16: UNCALLED SEGMENT, IGNORED FOR OVERLAY PROCESS
+    SEGMENT: ?PR?DELAY750MS?DS18B20
+*** WARNING L16: UNCALLED SEGMENT, IGNORED FOR OVERLAY PROCESS
+    SEGMENT: ?PR?DELAY500MS?DS18B20
+Program Size: data=105.0 xdata=0 code=2710
+creating hex file from "Water_temperature_control_system"...
+"Water_temperature_control_system" - 0 Error(s), 2 Warning(s).
+Build target 'Target 1'
+compiling main.c...
+scr\main.c(261): error C174: return-expression on void-function
+Target not created
+Build target 'Target 1'
+compiling main.c...
+scr\main.c(261): error C174: return-expression on void-function
+Target not created
+Build target 'Target 1'
+compiling main.c...
+linking...
+*** WARNING L16: UNCALLED SEGMENT, IGNORED FOR OVERLAY PROCESS
+    SEGMENT: ?PR?DELAY750MS?DS18B20
+*** WARNING L16: UNCALLED SEGMENT, IGNORED FOR OVERLAY PROCESS
+    SEGMENT: ?PR?DELAY500MS?DS18B20
+Program Size: data=105.0 xdata=0 code=2710
+creating hex file from "Water_temperature_control_system"...
+"Water_temperature_control_system" - 0 Error(s), 2 Warning(s).

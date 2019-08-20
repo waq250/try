@@ -1,0 +1,6 @@
+"STARTUP.obj",
+"Uart.obj",
+"main.obj",
+"DS18B20.obj" 
+TO "Water_temperature_control_system" 
+RAMSIZE(256) 

@@ -1,0 +1,296 @@
+C51 COMPILER V9.50a   MAIN                                                                 12/13/2018 19:26:19 PAGE 1   
+
+
+C51 COMPILER V9.50a, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN main.obj
+COMPILER INVOKED BY: D:\c51\C51\BIN\C51.EXE scr\main.c BROWSE DEBUG OBJECTEXTEND PRINT(.\main.lst) TABS(2) OBJECT(main.o
+                    -bj)
+
+line level    source
+
+   1          /*
+   2          **********************************************************************
+   3          *                         头文件包含
+   4          **********************************************************************
+   5          */
+   6          #include "Uart.h"
+   7          #include "DS18B20.h"
+   8          /*
+   9          **********************************************************************
+  10          *                         本地宏定义
+  11          **********************************************************************
+  12          */
+  13          /*
+  14          **********************************************************************
+  15          *                         本地全局变量
+  16          **********************************************************************
+  17          */
+  18          u16 temp = 0;         // 用来暂存12位的AD值
+  19          u8 tmh = 0, tml = 0;      // 用来暂存2个8位的AD值
+  20          u8 i = 0,j = 0; 
+  21          u8 N = 5; //数组排序参数
+  22          
+  23          
+  24          u8 Temperature_Read = 0;
+  25          u8 Receive_Flag = 0;
+  26          u8 T_Single = 0;
+  27          u8 T_Decade = 0;
+  28          u8 Time_Cnt = 0; // Time_Cnt用来计算中断次数
+  29          u8 Time_Threshold = 100; //Time_Threshold判断达到每隔100*10ms = 1s
+  30          
+  31          u8 Temperature_Set = 10;
+  32          double Temperature_SetNew = 0;
+  33          double Temperature_Diff = 1.3;
+  34          double Temperature = 0; //温度计算值
+  35          double Temperature_Collect = 0; //温度采集值
+  36          double Temperature_Temp = 0; //温度暂存值
+  37          double Temperature_Sum = 0; //温度去掉最大最小求和值
+  38          double Temperature_Array[5] = {0,0,0,0,0}; //温度数据暂存数组
+  39          double Kp = 1,Ki = 0,Kd = 10;
+  40          double Err = 0,Err_Last = 0,Err_Integral = 0,Rerr = 0;
+  41          double Rerr_allow = 0; //PID允许误差范围
+  42          
+  43          /*
+  44          **********************************************************************
+  45          *                         函数原型声明
+  46          **********************************************************************
+  47          */
+  48          void delay10ms(void);
+  49          void Int0Init(void);
+  50          void Int1Init(void);
+  51          void TemperatureRead(void);
+  52          void PID(void);
+  53          void Timer0Init(void);
+  54          /*********************************************************************
+C51 COMPILER V9.50a   MAIN                                                                 12/13/2018 19:26:19 PAGE 2   
+
+  55          * 函 数 名       : main
+  56          * 函数功能     : 主函数
+  57          * 参数列表       : 无
+  58          * 函数输出       : 无
+  59          *********************************************************************/
+  60          void main(void)
+  61          { 
+  62   1        UartInit();
+  63   1        Int0Init();
+  64   1        Int1Init();
+  65   1        Timer0Init();
+  66   1        while (1)
+  67   1        {
+  68   2           Temperature_Sum = 0;
+  69   2           for(i = 0;i < 5;i++) //温度采集数值预处理， 5个值进行处理输出一个值，平均1s输出一个值
+  70   2           {
+  71   3            TemperatureRead();
+  72   3            Temperature_Array[i] = Temperature_Collect;
+  73   3           }
+  74   2           
+  75   2           for(i = 0;i < N - 1;i++) //外层循环控制轮数（从小到大排序）
+  76   2           {
+  77   3              for(j = 0;j < N - i - 1;j++) //内层循环控制每轮的比较次数
+  78   3            {
+  79   4              if(Temperature_Array[j] > Temperature_Array[j + 1]) //如果当前值大于后一个值，就交换
+  80   4              {
+  81   5                Temperature_Temp =  Temperature_Array[j];
+  82   5                Temperature_Array[j] = Temperature_Array[j + 1];
+  83   5                Temperature_Array[j + 1] = Temperature_Temp;
+  84   5              } 
+  85   4            }
+  86   3           }
+  87   2              for(i = 1;i < N - 1;i++) //去掉最大最小值   
+  88   2          {       
+  89   3               Temperature_Sum += Temperature_Array[i];    
+  90   3          }    
+  91   2           Temperature = Temperature_Sum/(N - 2); //取平均 
+  92   2           Temperature_Read = (u8)(Temperature);
+  93   2           PID();
+  94   2           if(Rerr > Rerr_allow)
+  95   2           CT_Led2 = 0; //加热
+  96   2           else
+  97   2           CT_Led2 = 1; //停止加热
+  98   2      
+  99   2      
+ 100   2      //     }
+ 101   2        }
+ 102   1      }
+ 103          
+ 104          /*********************************************************************
+ 105          * 函 数 名       : Timer0Init
+ 106          * 函数功能     : 定时器0初始化函数
+ 107          * 参数列表       : 无
+ 108          * 函数输出       : 无
+ 109          *********************************************************************/
+ 110          void Timer0Init(void)
+ 111          {
+ 112   1        TMOD &= 0xf0;   // T0设为定时器模式，仅用TR0控制打开
+ 113   1        TMOD |= 0x01;   // T0选择为工作模式1：16位定时器、TH0 TL0全使用
+ 114   1      
+ 115   1        TH0 = 0xd8;     // 使用单片机小精灵计算10ms定时的TH0、TL0初值
+ 116   1        TL0 = 0xf0; 
+C51 COMPILER V9.50a   MAIN                                                                 12/13/2018 19:26:19 PAGE 3   
+
+ 117   1          ET0 = 0;      // 先关定时器0中断允许
+ 118   1        EA = 1;       // 打开总中断
+ 119   1        TR0 = 1;      // 开始计时     
+ 120   1      }
+ 121          
+ 122          
+ 123          
+ 124          /*********************************************************************
+ 125          * 函 数 名       : Timer0Isr
+ 126          * 函数功能     : 定时器0中断处理程序
+ 127          * 参数列表       : 无
+ 128          * 函数输出       : 无
+ 129          *********************************************************************/
+ 130          void Timer0Isr(void) interrupt 1
+ 131          {
+ 132   1        TH0 = 0xd8;       // 使用单片机小精灵计算10ms定时的TH0、TL0初值
+ 133   1        TL0 = 0xf0; 
+ 134   1        
+ 135   1        if (Time_Cnt++ >= 100)   // 每隔100*10ms = 1s，则让LED亮灭状态转换一次
+ 136   1        {
+ 137   2          Time_Cnt = 0;   // gCnt置为初值0以开启下一次中断次数计数
+ 138   2          Led5 = !Led5;     // LED亮灭转换
+ 139   2          UartSendByte(Temperature_Read/10 + '0');
+ 140   2          UartSendByte(Temperature_Read%10 + '0');
+ 141   2          UartSendByte(' ');
+ 142   2            
+ 143   2        }
+ 144   1      }
+ 145          /*********************************************************************
+ 146          * 函 数 名       : Int0Init
+ 147          * 函数功能     : 初始化INT0为下降沿触发、并打开各级中断开关
+ 148          * 参数列表       : 无
+ 149          * 函数输出       : 无
+ 150          *********************************************************************/
+ 151          void Int0Init(void)
+ 152          {
+ 153   1        IT0 = 1;      // 设置为边沿触发模式（下降沿）
+ 154   1        EX0 = 1;      // 打开INT0的中断允许。 
+ 155   1        EA = 1;       // 打开总中断 
+ 156   1      }
+ 157          
+ 158          
+ 159          /*********************************************************************
+ 160          * 函 数 名       : Int1Init
+ 161          * 函数功能     : 初始化INT1为下降沿触发、并打开各级中断开关
+ 162          * 参数列表       : 无
+ 163          * 函数输出       : 无
+ 164          *********************************************************************/
+ 165          void Int1Init(void)
+ 166          {
+ 167   1        IT1 = 1;      // 设置为边沿触发模式（下降沿）
+ 168   1        EX1 = 1;      // 打开INT1的中断允许。 
+ 169   1        EA = 1;       // 打开总中断 
+ 170   1      }
+ 171          /*********************************************************************
+ 172          * 函 数 名       : Int0Isr
+ 173          * 函数功能     : INT0的中断处理程序(interrupt service routine)
+ 174                     注意：INT0对应的中断号码是0
+ 175          * 参数列表       : 无
+ 176          * 函数输出       : 无
+ 177          *********************************************************************/
+ 178          void Int0Isr(void)  interrupt 0   
+C51 COMPILER V9.50a   MAIN                                                                 12/13/2018 19:26:19 PAGE 4   
+
+ 179          {
+ 180   1        delay10ms();      // 软件延时消抖
+ 181   1        if (CT_Time == 0)     // 延时10ms后S15仍为低电平证明按键确实被按下
+ 182   1        {
+ 183   2          Led3 ^= 1;    // LED1取反
+ 184   2          ET0 ^= 1;
+ 185   2          if(ET0 == 1)
+ 186   2          {
+ 187   3            UartSendByte('T');
+ 188   3            UartSendByte(':');
+ 189   3          }
+ 190   2        }
+ 191   1      }
+ 192          /*********************************************************************
+ 193          * 函 数 名       : Int1Isr
+ 194          * 函数功能     : INT1的中断处理程序(interrupt service routine)
+ 195                     注意：INT1对应的中断号码是2而不是1
+ 196          * 参数列表       : 无
+ 197          * 函数输出       : 无
+ 198          *********************************************************************/
+ 199          void Int1Isr(void)  interrupt 2   
+ 200          {
+ 201   1        delay10ms();          // 软件延时消抖
+ 202   1        delay10ms();
+ 203   1        delay10ms();
+ 204   1        if (send_T == 0)      // 延时10ms后S16仍为低电平证明按键确实被按下
+ 205   1        {
+ 206   2          Led4 ^= 1;
+ 207   2          UartSendByte('T');
+ 208   2          UartSendByte('_');
+ 209   2          UartSendByte('s');
+ 210   2          UartSendByte('e');
+ 211   2          UartSendByte('t');
+ 212   2          UartSendByte(Temperature_Set/10 + '0');
+ 213   2          UartSendByte(Temperature_Set%10 + '0');
+ 214   2          UartSendByte(' ');
+ 215   2          UartSendByte('T');
+ 216   2          UartSendByte(Temperature_Read/10 + '0');
+ 217   2          UartSendByte(Temperature_Read%10 + '0');
+ 218   2          UartSendByte(' ');
+ 219   2      
+ 220   2        }
+ 221   1      }
+ 222          
+ 223          
+ 224          
+ 225          /*********************************************************************
+ 226          * 函 数 名       : delay10ms
+ 227          * 函数功能     : 由单片机小精灵V1.3生成的延时10ms的精确延时函数
+ 228          * 参数列表       : 无
+ 229          * 函数输出       : 无
+ 230          *********************************************************************/
+ 231          void delay10ms(void)   //误差 0us
+ 232          {
+ 233   1          unsigned char a,b,c;
+ 234   1          for(c=1;c>0;c--)
+ 235   1              for(b=38;b>0;b--)
+ 236   1                  for(a=130;a>0;a--);
+ 237   1      }
+ 238          
+ 239          void TemperatureRead(void)
+ 240          {
+C51 COMPILER V9.50a   MAIN                                                                 12/13/2018 19:26:19 PAGE 5   
+
+ 241   1        Ds18b20TempConvertCmd();    // 先写入转换命令
+ 242   1        Ds18b20TempReadCmd();     // 然后等待转换完后发送读取温度命令
+ 243   1        tml = Ds18b20ReadByte();    // 读取温度值共16位，先读低字节
+ 244   1        tmh = Ds18b20ReadByte();    // 再读高字节
+ 245   1      
+ 246   1        temp = tml | (tmh << 8);    // 默认是12位分辨率，前面4个S位是符号位
+ 247   1        
+ 248   1        // 正温度时符号位为0，下面代码计算没有考虑负温度情况，因为我们实验是在
+ 249   1        // 室温下做的，如果要考虑到负温度的情况，代码中要先判断S位，若S位为1则
+ 250   1        // 必须点去掉S的1再计算，计算后的值加负号即可。
+ 251   1        Temperature_Collect = temp * 0.0625;
+ 252   1      
+ 253   1      }
+ 254          
+ 255          void PID(void)
+ 256          {
+ 257   1        Err = Temperature_Set - Temperature;
+ 258   1        Err_Integral += Err;
+ 259   1        Rerr = Kp*Err + Ki*Err_Integral + Kd*(Err - Err_Last);
+ 260   1        Err_Last = Err;
+ 261   1         
+ 262   1      }
+ 263          
+ 264          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    942    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     90    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
